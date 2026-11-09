@@ -36,7 +36,11 @@ object Torrent {
     private val requests = ConcurrentHashMap<Int, AtomicInteger>() // file index → latest request, to drop stale ones
 
     /** owned: a download's torrent the player reads from, whose files and other episodes are left alone. */
-    class Loaded(val link: String, val info: TorrentInfo, val handle: TorrentHandle, val dir: File, val owned: Boolean = false) {
+    class Loaded(val link: String, val info: TorrentInfo, handle: TorrentHandle, val dir: File, val owned: Boolean = false) {
+        @Volatile var handle = handle
+            internal set
+        /** The stream's files (indexes) that may be on disk; the others were never asked for or are deleted. */
+        internal val kept = HashSet<Int>()
         val hash: String = info.infoHash().toHex()
         /** The torrent's files as episode.js reads them. */
         val files = (0 until info.numFiles()).map { org.json.JSONObject().put("name", info.files().filePath(it)).put("index", it) }
@@ -74,14 +78,37 @@ object Torrent {
      * Downloads file `index` (and `also`, the next episode, when given), the start and end of it first: mpv reads a
      * file's index before playing, which MP4 keeps at the end and MKV's seek index too. Returns the URL to play.
      */
-    fun play(t: Loaded, index: Int, also: Int? = null): String {
-        if (t.owned) listOfNotNull(index, also).forEach { t.handle.filePriority(it, Priority.TOP_PRIORITY) } // the download's other episodes carry on
-        else t.handle.prioritizeFiles(Array(t.info.numFiles()) { if (it == index || it == also) Priority.DEFAULT else Priority.IGNORE })
-        val first = t.info.mapFile(index, 0, 1).piece()
-        val last = t.info.mapFile(index, (t.info.files().fileSize(index) - 1).coerceAtLeast(0), 1).piece()
-        for (i in 0..2) if (first + i <= last) t.handle.setPieceDeadline(first + i, i * 100)
-        for (i in 0..1) if (last - i >= first) t.handle.setPieceDeadline(last - i, 300 + i * 100)
-        return "http://127.0.0.1:${server.localPort}/${t.hash}/$index"
+    suspend fun play(t: Loaded, index: Int, also: Int? = null): String = lock.withLock {
+        withContext(Dispatchers.IO) {
+            val wanted = setOfNotNull(index, also)
+            val priorities = Array(t.info.numFiles()) { if (it in wanted) Priority.DEFAULT else Priority.IGNORE }
+            if (t.owned) wanted.forEach { t.handle.filePriority(it, Priority.TOP_PRIORITY) } // the download's other episodes carry on
+            else if (current === t && (t.kept - wanted).isNotEmpty()) prune(t, t.kept - wanted, priorities)
+            else t.handle.prioritizeFiles(priorities)
+            if (!t.owned) t.kept += wanted
+            val first = t.info.mapFile(index, 0, 1).piece()
+            val last = t.info.mapFile(index, (t.info.files().fileSize(index) - 1).coerceAtLeast(0), 1).piece()
+            for (i in 0..2) if (first + i <= last) t.handle.setPieceDeadline(first + i, i * 100)
+            for (i in 0..1) if (last - i >= first) t.handle.setPieceDeadline(last - i, 300 + i * 100)
+            "http://127.0.0.1:${server.localPort}/${t.hash}/$index"
+        }
+    }
+
+    /**
+     * Moving on in a season pack: the episodes left behind are deleted, so a binge keeps at most two on the phone.
+     * The torrent is removed (files kept) and added again, so libtorrent checks what's on disk and knows those pieces
+     * are gone: deleting under it would leave it serving (and uploading) pieces it no longer has.
+     */
+    private fun prune(t: Loaded, gone: Set<Int>, priorities: Array<Priority>) {
+        session.remove(t.handle)
+        val until = System.currentTimeMillis() + 10_000
+        while (session.find(t.info.infoHash()) != null && System.currentTimeMillis() < until) Thread.sleep(50)
+        gone.forEach { File(t.dir, t.info.files().filePath(it)).delete() }
+        t.kept -= gone
+        session.download(t.info, t.dir, null, priorities, null, TorrentFlags.SEQUENTIAL_DOWNLOAD)
+        var handle: TorrentHandle? = null
+        while (handle == null) { handle = session.find(t.info.infoHash()); if (handle == null) Thread.sleep(50) }
+        t.handle = handle
     }
 
     /** A torrent's metadata: from its .torrent URL, or from peers for a magnet (blocking; call off the main thread). */

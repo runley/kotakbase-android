@@ -18,8 +18,8 @@ android {
         applicationId = "app.kotakbase"
         minSdk = 26 // libmpv's minimum
         targetSdk = 36
-        versionCode = 2 // raise both with every release; the update check compares versionName
-        versionName = "0.1.1"
+        versionCode = 3 // raise both with every release; the update check compares versionName
+        versionName = "0.1.2"
         ndk { abiFilters += if (releasing) listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64") }
         // API client ids from secrets.properties (scripts/sync-desktop.mjs copies the desktop's); empty: sign-in is off
         val secrets = Properties().apply { rootProject.file("secrets.properties").takeIf { it.exists() }?.reader()?.use { load(it) } }
