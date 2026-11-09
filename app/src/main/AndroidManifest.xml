@@ -10,6 +10,7 @@
 
     <application
         android:label="Kotakbase"
+        android:icon="@mipmap/ic_launcher"
         android:theme="@android:style/Theme.Material.NoActionBar">
         <!-- configChanges: folding/unfolding resizes the window instead of recreating the activity (and playback) -->
         <activity
