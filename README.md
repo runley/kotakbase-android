@@ -88,7 +88,11 @@ immersive mode; keyboard shortcuts → gestures.
      emulator and the Fold: joining, chat, the host starting an episode (the other opens it, in step within a second),
      a pause on the guest pausing the host. Invite links `kotakbase://join/CODE`. Not yet: saved rooms with a PIN, ban,
      chat over the player; not tried against the desktop app itself (same code, so it should).
-5. Signed release APK on GitHub + in-app update check.
+5. **Release and updates** ✅: `./gradlew assembleRelease` makes a signed, R8-shrunk, arm64-only APK (~44 MB). Settings →
+   Updates (desktop wording) and a check at start (every 6 h at most, release builds only) read this repo's latest
+   GitHub release; a newer `versionName` downloads its `.apk` and offers "Restart to update", which opens Android's
+   installer (it asks, and only accepts the same signing key). Tested on the emulator: browsing, the update check,
+   Sintel playing through the torrent and mpv.
 
 ## Spike findings
 
@@ -116,5 +120,16 @@ JDK 17 and the Android SDK (`ANDROID_HOME`), then:
 ```bash
 ./gradlew installDebug
 ```
+
+### Releasing
+
+1. Raise `versionCode` and `versionName` in `app/build.gradle.kts`.
+2. `./gradlew assembleRelease` (needs `keystore.properties`, not in git: `storeFile`, `storePassword`, `keyAlias`,
+   `keyPassword`). Keep the key file and its password backed up: without them no update can install over the app.
+3. Create a GitHub release tagged `v<versionName>` with `app/build/outputs/apk/release/app-release.apk` attached
+   (`gh release create v0.1.0 app/build/outputs/apk/release/app-release.apk#kotakbase-0.1.0.apk`). The repo must be
+   public for the app's update check to see it.
+
+A debug build is signed with another key: uninstall it (which drops its data) before installing a release.
 
 Spike with another source: `adb shell am start -n app.kotakbase/.SpikeActivity --es source "magnet:?..."`

@@ -35,16 +35,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 
-// The desktop app's colours (ui/style.css :root)
-val Bg = Color(0xFF0F0F10)
-val Panel = Color(0xFF1A1A1C)
-val Panel2 = Color(0xFF232326)
-val Line = Color(0xFF2A2A2D)
-val TextColor = Color(0xFFF2F1EC)
-val Muted = Color(0xFF9A998F)
-val Accent = Color(0xFFC8F04A)
+// The desktop app's colours (ui/style.css :root), and manga mode's (body.manga): a violet accent on a cooler black.
+// Read through Store.manga, so screens redraw in the other palette when the mode switches.
+val Lime = Color(0xFFC8F04A)
+val Violet = Color(0xFFB9A2FF)
+val Bg get() = if (Store.manga) Color(0xFF0F0E12) else Color(0xFF0F0F10)
+val Panel get() = if (Store.manga) Color(0xFF1B1A1F) else Color(0xFF1A1A1C)
+val Panel2 get() = if (Store.manga) Color(0xFF24222A) else Color(0xFF232326)
+val Line get() = if (Store.manga) Color(0xFF2A2830) else Color(0xFF2A2A2D)
+val TextColor get() = if (Store.manga) Color(0xFFF1EEF6) else Color(0xFFF2F1EC)
+val Muted get() = if (Store.manga) Color(0xFF968FA3) else Color(0xFF9A998F)
+val Accent get() = if (Store.manga) Violet else Lime
 
-val colors = darkColorScheme(
+val colors get() = darkColorScheme(
     primary = Accent, onPrimary = Bg, secondaryContainer = Panel2, onSecondaryContainer = TextColor,
     background = Bg, onBackground = TextColor, surface = Bg, onSurface = TextColor, surfaceVariant = Panel2, onSurfaceVariant = Muted,
     surfaceContainer = Panel, surfaceContainerHigh = Panel2, surfaceContainerLow = Panel, outline = Line, outlineVariant = Line
@@ -69,6 +72,7 @@ object Icons {
     val next = icon("M5 5.5l9 6.5-9 6.5zM19 5v14")
     val prev = icon("M19 5.5l-9 6.5 9 6.5zM5 5v14")
     val download = icon("M12 4v11m-5-5 5 5 5-5M5 20h14") // the desktop's download button
+    val swap = icon("M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7") // the logo's anime/manga badge
     val people = icon("M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.5a3.5 3.5 0 0 1 0 6.5M18.5 14.5c1.8.8 3 2.7 3 5.5")
 }
 

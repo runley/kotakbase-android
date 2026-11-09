@@ -62,8 +62,10 @@ fun HomePage(nav: Nav) {
     // manga has no seasons, so no seasonal rows
     val rows = if (Store.manga) listOf("continue", "list", "trending", "popular")
     else listOf("continue", "season", "list", "trending", "popular", "upcoming")
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-        items(rows, key = { it }) { kind ->
+    // loaded here, not inside the list: a row scrolled out of view would forget its cards, and coming back to it
+    // would show "Loading…" (a shorter row) and fetch again, making the page jump
+    val loaded = rows.associateWith { kind ->
+        androidx.compose.runtime.key(kind) {
             val (name, fetch) = more(kind)
             val rowFetch: suspend () -> List<Media> = when (kind) {
                 "continue", "list" -> suspend { fetch().take(AniList.ROW_LIMIT) }
@@ -73,15 +75,20 @@ fun HomePage(nav: Nav) {
                 else -> AniList.trending()
             }
             val mine = kind == "continue" || kind == "list"
-            HomeRow(kind, t(name), nav, if (mine) listOf(Store.manga, local) else listOf(Store.manga), rowFetch)
+            name to loading(*(if (mine) arrayOf<Any>(Store.manga, local) else arrayOf<Any>(Store.manga))) { rowFetch() }
+        }
+    }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+        items(rows, key = { it }) { kind ->
+            val (name, result) = loaded.getValue(kind)
+            HomeRow(kind, t(name), nav, result.value)
         }
     }
 }
 
 /** A home row: its title, "View More", and its cards; one that turns out empty isn't shown. */
 @Composable
-private fun HomeRow(kind: String, name: String, nav: Nav, keys: List<Any>, fetch: suspend () -> List<Media>) {
-    val result by loading(*keys.toTypedArray()) { fetch() }
+private fun HomeRow(kind: String, name: String, nav: Nav, result: Result<List<Media>>?) {
     val list = result?.getOrNull()
     if (result != null && list?.isEmpty() == true) return
     Column(Modifier.padding(top = 18.dp)) {
@@ -209,5 +216,40 @@ fun SettingsPage() {
         }
         item { AniListSection() }
         item { ExtensionsSection() }
+        item { UpdatesSection() }
     }
+}
+
+/** Settings → Updates (desktop wording): the version, Check for updates, and installing a downloaded one. */
+@Composable
+fun UpdatesSection() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Column(Modifier.padding(top = 16.dp)) {
+        Text(t("Updates"), style = MaterialTheme.typography.titleMedium)
+        Text(t("You have version {version}.", "version" to BuildConfig.VERSION_NAME), Modifier.padding(vertical = 4.dp))
+        when (Updates.status) {
+            "checking" -> Text(t("Checking for updates…"))
+            "downloading" -> Text(t("Downloading version {version}…", "version" to Updates.version))
+            "latest" -> Text(t("You have the latest version."))
+            "error" -> Text(t("Couldn't check for updates: {error}", "error" to Updates.error), color = MaterialTheme.colorScheme.error)
+            "ready" -> Text(t("Version {version} is downloaded.", "version" to Updates.version))
+        }
+        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (Updates.status == "ready") androidx.compose.material3.Button({ Updates.install(context) }) { Text(t("Restart to update")) }
+            androidx.compose.material3.OutlinedButton({ Updates.check() }, enabled = Updates.status != "checking" && Updates.status != "downloading") { Text(t("Check for updates")) }
+        }
+    }
+}
+
+/** A newer version finished downloading (desktop's "ready" prompt): install now, or later from Settings. */
+@Composable
+fun UpdateReadyDialog() {
+    if (Updates.status != "ready" || Updates.dismissed) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { Updates.dismissed = true },
+        title = { Text(t("Kotakbase {version} is ready", "version" to Updates.version)) },
+        confirmButton = { TextButton({ Updates.dismissed = true; Updates.install(context) }) { Text(t("Restart to update")) } },
+        dismissButton = { TextButton({ Updates.dismissed = true }) { Text(t("Cancel")) } },
+    )
 }

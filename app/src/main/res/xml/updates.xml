@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the downloaded update, handed to Android's installer (Updates.kt) -->
+<paths><cache-path name="update" path="." /></paths>

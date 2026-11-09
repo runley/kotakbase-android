@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -41,6 +42,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -96,6 +99,7 @@ class MainActivity : ComponentActivity() {
         Auth.init(this)
         Downloads.init(this)
         Room.init(this)
+        Updates.init(this)
         AniSync.anime.start(); AniSync.manga.start()
         enableEdgeToEdge()
         Invites.take(intent)
@@ -107,6 +111,17 @@ class MainActivity : ComponentActivity() {
 
 private val TABS = listOf(Page.Home, Page.Search(), Page.MyList, Page.Downloads, Page.Together())
 
+/** A bottom-bar label on one line, its text shrunk to fit ("Watch Together", or longer in other languages). */
+@Composable
+private fun FitText(text: String) {
+    val style = androidx.compose.material3.LocalTextStyle.current
+    val color = androidx.compose.material3.LocalContentColor.current
+    androidx.compose.foundation.text.BasicText(
+        text, style = style, color = { color }, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = style.fontSize),
+    )
+}
+
 @Composable
 fun App() {
     val nav = remember { Nav() }
@@ -116,6 +131,7 @@ fun App() {
     BackHandler(nav.canGoBack) { nav.back() }
     SignInDialog()
     FirstSyncDialog()
+    UpdateReadyDialog()
     // an invite link opened the app: that room, on the Watch Together page
     LaunchedEffect(Invites.code) { Invites.code?.let { nav.tab(Page.Together(it)); Invites.code = null } }
     // the player's Previous/Next for an episode that isn't in its torrent: that episode's source picker
@@ -164,7 +180,7 @@ fun App() {
             }
             if (!wide) NavigationBar(containerColor = Panel) {
                 TABS.forEachIndexed { i, tab ->
-                    NavigationBarItem(i == current, { nav.tab(tab) }, { Icon(tabIcons[i], tabLabels[i]) }, label = { Text(tabLabels[i], maxLines = 1) })
+                    NavigationBarItem(i == current, { nav.tab(tab) }, { Icon(tabIcons[i], tabLabels[i]) }, label = { FitText(tabLabels[i]) })
                 }
             }
         }
@@ -180,10 +196,21 @@ fun ModeSwitch(nav: Nav, compact: Boolean) {
             .clickable { Store.setMode(!Store.manga); nav.tab(Page.Home) }.semantics { contentDescription = label },
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box(Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(Accent), contentAlignment = Alignment.Center) {
-            Text(if (Store.manga) "m" else "k", color = Bg, fontWeight = FontWeight.Black, fontSize = 18.sp)
+        // the box is the switch (desktop .logo-box): a corner badge in the other mode's colour, with swap arrows
+        Box(Modifier.padding(end = 6.dp, bottom = 6.dp)) {
+            Box(Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(Accent), contentAlignment = Alignment.Center) {
+                Text(if (Store.manga) "m" else "k", color = Bg, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            }
+            Box(
+                Modifier.align(Alignment.BottomEnd).offset(6.dp, 6.dp).size(20.dp).clip(RoundedCornerShape(7.dp)).background(Bg)
+                    .padding(2.dp).clip(RoundedCornerShape(5.dp)).background(if (Store.manga) Lime else Violet),
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.swap, null, Modifier.size(11.dp), tint = Color(0xFF0F0F10)) }
         }
-        if (!compact) Text((if (Store.manga) "mangal" else "kotak") + "base", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        if (!compact) Text(androidx.compose.ui.text.buildAnnotatedString {
+            append(if (Store.manga) "mangal" else "kotak")
+            withStyle(androidx.compose.ui.text.SpanStyle(color = Muted)) { append("base") }
+        }, fontWeight = FontWeight.Bold, fontSize = 20.sp)
     }
     // Settings sits by the logo, leaving the bar to the five pages
     androidx.compose.material3.IconButton({ nav.tab(Page.Settings) }, Modifier.padding(start = if (compact) 16.dp else 0.dp)) {

@@ -5,6 +5,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// The release signing key: keystore.properties (not in git) names the key file outside the repo and its password
+val keystore = Properties().apply { rootProject.file("keystore.properties").takeIf { it.exists() }?.reader()?.use { load(it) } }
+// release builds are for phones (arm64 only, half the size); debug ones also run on the x86_64 emulator
+val releasing = gradle.startParameter.taskNames.any { it.contains("Release") }
+
 android {
     namespace = "app.kotakbase"
     compileSdk = 37
@@ -13,14 +18,32 @@ android {
         applicationId = "app.kotakbase"
         minSdk = 26 // libmpv's minimum
         targetSdk = 36
-        versionCode = 1
+        versionCode = 1 // raise both with every release; the update check compares versionName
         versionName = "0.1.0"
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") } // the Fold, and the emulator
+        ndk { abiFilters += if (releasing) listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64") }
         // API client ids from secrets.properties (scripts/sync-desktop.mjs copies the desktop's); empty: sign-in is off
         val secrets = Properties().apply { rootProject.file("secrets.properties").takeIf { it.exists() }?.reader()?.use { load(it) } }
         buildConfigField("String", "ANILIST_CLIENT_ID", "\"${secrets.getProperty("anilistClientId", "")}\"")
     }
     buildFeatures { compose = true; buildConfig = true }
+    signingConfigs {
+        create("release") {
+            if (!keystore.isEmpty) {
+                storeFile = file(keystore.getProperty("storeFile"))
+                storePassword = keystore.getProperty("storePassword")
+                keyAlias = keystore.getProperty("keyAlias")
+                keyPassword = keystore.getProperty("keyPassword")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = if (keystore.isEmpty) null else signingConfigs.getByName("release")
+        }
+    }
 }
 
 dependencies {
