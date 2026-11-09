@@ -88,6 +88,37 @@ object Store {
         else put(m.id.toString(), JSONObject().apply { put("episode", n); put("time", 0); put("duration", 1); put("at", System.currentTimeMillis()) })
     }
 
+    /**
+     * The player's progress (desktop app.js play() onProgress): watched once the ending credits start or 90% in; the
+     * last watched episode is saved as played to the end; the final episode of a finished show leaves Continue Watching.
+     * Returns whether this episode counts as watched.
+     */
+    fun saveProgress(m: Media, episode: Int, time: Double, duration: Double, credits: Double?): Boolean {
+        val watched = time > duration * 0.9 || (credits != null && time >= credits)
+        val last = episode >= m.epCount
+        val old = obj(k("progress", m.isManga)).optJSONObject(m.id.toString())
+        val wasFinished = isFinished(m, progress(m.isManga)[m.id])
+        editProgress(m) {
+            put(m.id.toString(), JSONObject().apply {
+                if (watched && !last) { put("episode", episode + 1); put("time", 0); put("duration", 1) }
+                else { put("episode", episode); put("time", if (watched) duration else time); put("duration", duration) }
+                // watching a show you'd finished again: it stays in Continue Watching
+                if (watched && last && m.status == "FINISHED") put("finished", true)
+                else if (wasFinished || old?.optBoolean("rewatch") == true) put("rewatch", true)
+                put("at", System.currentTimeMillis())
+            })
+        }
+        return watched
+    }
+
+    /** One history entry per playback (desktop logWatched); the last 2000 are kept. */
+    fun logWatched(m: Media, episode: Int) {
+        val key = k("history", m.isManga)
+        val list = string(key)?.let { runCatching { JSONArray(it) }.getOrNull() } ?: JSONArray()
+        list.put(JSONObject().put("id", m.id).put("episode", episode).put("at", System.currentTimeMillis()).put("finished", episode >= m.epCount && m.status == "FINISHED"))
+        putString(key, JSONArray((maxOf(0, list.length() - 2000) until list.length()).map { list.get(it) }).toString())
+    }
+
     fun setHidden(m: Media, hidden: Boolean) = editProgress(m) {
         optJSONObject(m.id.toString())?.let { if (hidden) it.put("hidden", true) else it.remove("hidden") }
     }

@@ -40,8 +40,7 @@ immersive mode; keyboard shortcuts → gestures.
 
 ## Phases
 
-0. **Spike**: torrent → local HTTP → libmpv, fold/unfold mid-playback. ✅ emulator + Pixel 10 Pro Fold
-   (`adb shell am start -n app.kotakbase/.SpikeActivity`).
+0. **Spike** ✅: torrent → local HTTP → libmpv, fold/unfold mid-playback (replaced by the player in phase 3).
 1. **Browse** ✅: AniList home rows (cached like desktop), View More, search with filters, show and manga pages
    (your list, progress, "already watched", ratings, episodes, Related, Similar), Your List, Settings → Language,
    anime ⇄ manga switch, all 9 languages from the desktop's translations (`node scripts/sync-desktop.mjs` to refresh).
@@ -53,13 +52,26 @@ immersive mode; keyboard shortcuts → gestures.
    `atob`, `setTimeout` (assets/js/web.js). The source picker asks every torrent extension with Hayase's query
    (titles, episode, ani.zip ids), and ranks and Auto Selects with the desktop's own `release.js`/`lang.js`, run
    unchanged (copied by `scripts/sync-desktop.mjs`). Manga: series match (desktop `manga.js`), chapter list, a vertical
-   reader that marks a chapter read at its end, "Read chapter n". Picking a source plays it in the spike player.
-   Left for later: tracker scrape for extensions that send no seeder counts (their results show as 0 seeders and are
-   hidden, as on desktop before the scrape), binary `fetch` bodies, `DOMParser`, extension options UI, the audio/
-   subtitle language settings (defaults: Japanese audio, English subtitles), paged RTL/LTR reader.
+   reader that marks a chapter read at its end, "Read chapter n". Seeder counts for results sent without them come
+   from Nyaa's tracker (scrape), as on desktop.
+   Left for later: binary `fetch` bodies, `DOMParser`, extension options UI, the audio/subtitle language settings
+   (defaults: Japanese audio, English subtitles).
    Test extensions (legal content: Blender's Sintel, MangaDex's API): `node test-extensions/serve.mjs`,
    `adb reverse tcp:8099 tcp:8099`, add `http://localhost:8099/index.json` (debug builds allow that plain-HTTP link).
-3. Player (gestures, chapters, PiP, Fold layouts, the right file of a batch) and paged manga reader.
+3. **Player and reader** ✅ (`PlayerActivity`, `Mpv`, `Torrent`, `Reader`):
+   - Torrents: one at a time, only the episode's file (desktop `episode.js` picks it, run unchanged), its start and end
+     first (MP4/MKV indexes), stale waits dropped on seek; unsafe torrents (programs, no video) refused as on desktop;
+     the stream's files are deleted when the player closes.
+   - Player: libmpv with hardware decoding on the phone (software on the emulator), mpv's `fast` profile with 8-bit
+     buffers (GPU memory 227 → 142 MB on the Fold); controls, seek bar, double-tap ±10 s, audio/subtitle menus and
+     tracks picked by Settings' languages (desktop `lang.js`), Skip Intro/Credits from chapters or AniSkip, resume,
+     progress and history saved like desktop (Continue Watching), next episode from the same season pack or else
+     the source picker, picture-in-picture (auto on Home), tabletop layout half-folded, pause in the background.
+   - Reader: vertical, right-to-left or left-to-right (remembered per manga; default by country like desktop), tap
+     zones, two pages side by side unfolded, page counter, next chapter.
+   Not yet: brightness/volume swipes, zoom in the reader, the episode list inside the player, subtitles from separate
+   files in the torrent, a CJK fallback font (Roboto only; MKVs bring their own fonts), the two-page spread checked on
+   a real multi-page manga (the test title's chapters are single pages). Memory on the Fold while playing: ~362 MB.
 4. Sync, downloads (foreground service), Watch Together against desktop.
 5. Signed release APK on GitHub + in-app update check.
 

@@ -16,10 +16,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- the phase 0 spike, kept for the player work: adb shell am start -n app.kotakbase/.SpikeActivity -->
+        <!-- its own task, so picture-in-picture takes just the player; one at a time (a new episode reuses it) -->
         <activity
-            android:name=".SpikeActivity"
-            android:exported="true"
+            android:name=".PlayerActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="app.kotakbase.player"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboardHidden" />
     </application>

@@ -24,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.launch
 
 /** Settings → Extensions (desktop's Extensions page): add by manifest link, switch on and off, delete. */
@@ -38,7 +40,8 @@ fun ExtensionsSection() {
     Column(Modifier.padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(t("Extensions"), style = MaterialTheme.typography.titleMedium)
         MutedText(t("Paste a Hayase extension manifest URL (https://…/index.json, gh:user/repo or npm:package)."))
-        OutlinedTextField(url, { url = it; error = null }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(t("Manifest URL")) })
+        OutlinedTextField(url, { url = it; error = null }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(t("Manifest URL")) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false)) // autocorrect turned "index.json" into "index. json"
         Button({
             busy = true
             scope.launch {

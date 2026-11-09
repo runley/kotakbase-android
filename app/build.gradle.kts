@@ -29,6 +29,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("io.coil-kt.coil3:coil-compose:3.6.3")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3") // also brings OkHttp, used for AniList
+    implementation("androidx.window:window:1.5.1") // fold state, for the tabletop layout
     implementation("io.github.dokar3:quickjs-kt-android:1.0.18") // runs extensions and the desktop's shared JS
 
     testImplementation("junit:junit:4.13.2")

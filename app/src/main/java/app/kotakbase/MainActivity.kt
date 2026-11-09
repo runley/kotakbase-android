@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
         I18n.init(this)
         Shared.init(this)
         Extensions.init(this)
+        Torrent.init(this)
         enableEdgeToEdge()
         setContent { MaterialTheme(colorScheme = colors) { Surface(Modifier.fillMaxSize(), color = Bg) { App() } } }
     }
@@ -103,6 +104,12 @@ fun App() {
     LaunchedEffect(wide) { nav.resize(wide) }
     nav.wide = wide
     BackHandler(nav.canGoBack) { nav.back() }
+    // the player's Previous/Next for an episode that isn't in its torrent: that episode's source picker
+    LaunchedEffect(PlayerRequests.sources) {
+        val p = PlayerRequests.sources ?: return@LaunchedEffect
+        if (nav.top is Page.Sources) nav.stack[nav.stack.lastIndex] = p else nav.go(p)
+        PlayerRequests.sources = null
+    }
     val holder = rememberSaveableStateHolder() // keeps each page's scroll position while it's under another
 
     @Composable

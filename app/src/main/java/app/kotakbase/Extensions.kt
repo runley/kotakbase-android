@@ -221,6 +221,11 @@ object Extensions {
                 }
             }.awaitAll()
         }
+        // some extensions (Seadex) send no seeder counts; ask the tracker, as desktop does, so those aren't shown as dead
+        val unknown = byHash.values.filter { it.optLong("seeders") == 0L }.map { it.getString("hash") }
+        if (unknown.isNotEmpty()) Torrent.scrape(unknown).forEach { (hash, c) ->
+            byHash[hash]?.put("seeders", c.first)?.put("leechers", c.second)?.put("downloads", maxOf(byHash.getValue(hash).optLong("downloads"), c.third))
+        }
         return byHash.values.sortedWith(order) to errors
     }
 

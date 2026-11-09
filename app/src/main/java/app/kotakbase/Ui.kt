@@ -64,6 +64,10 @@ object Icons {
     val check = icon("m5 12.5 4.5 4.5L19 7.5")
     val close = icon("M6 6l12 12M18 6 6 18")
     val undo = icon("M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4")
+    val play = icon("M7 4.5v15l12-7.5z")
+    val pause = icon("M8 5v14M16 5v14")
+    val next = icon("M5 5.5l9 6.5-9 6.5zM19 5v14")
+    val prev = icon("M19 5.5l-9 6.5 9 6.5zM5 5v14")
 }
 
 val FORMAT = linkedMapOf("TV" to "TV Series", "TV_SHORT" to "TV Short", "MOVIE" to "Movie", "OVA" to "OVA", "ONA" to "ONA", "SPECIAL" to "Special")

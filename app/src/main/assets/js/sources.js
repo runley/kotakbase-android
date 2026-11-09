@@ -1,7 +1,8 @@
 // What the phone asks of the desktop's shared modules (copied as they are by scripts/sync-desktop.mjs), in one call
 // each, so the source picker ranks and Auto Selects exactly like desktop's.
 import { parseRelease, releaseTags, audioLanguages, subLanguages, rankByLanguage, pickAuto, forThisEntry, otherEntryWords, entryNumbers } from './release.js'
-import { LANGS } from './lang.js'
+import { LANGS, fromMpv, pickTrack, pickSubTrack } from './lang.js'
+import { pickFile, findEpisode, VIDEO, RISKY } from './episode.js'
 import { pickSeries, chapterRows, titlesOf } from './manga.js'
 
 // Same title list Hayase builds: all titles + synonyms, plus "S2" variants of "Season 2" / "2nd Season" (app.js titles())
@@ -56,3 +57,20 @@ export const series = (m, results) => pickSeries(m, results)
 export const chapters = (list, langs) => chapterRows(list, langs)
 // Settings' languages (ISO 639-2 keys) as the 2-letter codes manga extensions take, best first
 export const readLangs = keys => [...new Set(keys.map(k => LANGS[k]?.[1]).filter(Boolean))]
+
+// ---- the player ----
+// files: [{ name, index }] of the torrent; ids: { abs, tvdbSeason, tvdbSeasonEpisode } for continued seasons
+const indexOf = f => f ? f.index : -1
+export const fileFor = (files, episode, ids) => indexOf(pickFile(files, episode, ids ?? {}))
+// the next episode's file in the same torrent (a season pack), or -1: only when its name says so
+export const nextFile = (files, episode, ids, current) => { const f = findEpisode(files, episode, ids ?? {}); return f && f.index !== current ? f.index : -1 }
+// checked on the file list alone, before anything downloads (desktop main.js startPlay)
+export const refuse = files => files.some(f => RISKY.test(f.name)) ? 'risky' : files.some(f => VIDEO.test(f.name)) ? null : 'novideo'
+// mpv's track-list → the audio and subtitle tracks to turn on by Settings' language lists (null: leave / off)
+export function tracks (list, audio, subs) {
+  const a = fromMpv(list, 'audio')
+  const s = fromMpv(list, 'sub')
+  const ai = pickTrack(a, audio)
+  const sub = pickSubTrack(s, subs)
+  return { aid: ai >= 0 ? a[ai].number : null, sid: sub ? sub.number : null }
+}

@@ -98,8 +98,7 @@ fun SourcesPage(nav: Nav, id: Int, start: Int) {
 
     fun play(link: String, source: Extensions.Source?) {
         source?.group?.let { g -> Store.putString("sources", (Store.string("sources")?.let(::JSONObject) ?: JSONObject()).put(id.toString(), JSONObject().put("group", g)).toString()) }
-        // shortcut: until the player (phase 3) the spike plays the torrent's largest file, not this episode's
-        context.startActivity(Intent(context, SpikeActivity::class.java).putExtra("source", link))
+        PlayerActivity.start(context, id, episode, link)
     }
 
     val words = filter.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }

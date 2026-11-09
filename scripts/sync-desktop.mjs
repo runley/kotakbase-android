@@ -23,3 +23,6 @@ for (const file of ['release.js', 'lang.js', 'manga.js']) {
   copyFileSync(join(desktop, 'ui', file), join(js, file))
   console.log(file)
 }
+// which file of a torrent is an episode (the desktop's main process uses it; it has no imports, so it runs here too)
+copyFileSync(join(desktop, 'episode.js'), join(js, 'episode.js'))
+console.log('episode.js')

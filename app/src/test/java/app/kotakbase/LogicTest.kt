@@ -41,3 +41,13 @@ class LogicTest {
         assertTrue("No translation for: $missing", missing.isEmpty())
     }
 }
+
+class BencodeTest {
+    @Test fun scrapeAnswer() {
+        val hash = String(ByteArray(20) { it.toByte() }, Charsets.ISO_8859_1)
+        val body = "d5:filesd20:${hash}d8:completei12e10:downloadedi340e10:incompletei3eeee".toByteArray(Charsets.ISO_8859_1)
+        @Suppress("UNCHECKED_CAST")
+        val files = (Bencode(body).read() as Map<String, Any?>)["files"] as Map<String, Map<String, Long>>
+        assertEquals(mapOf("complete" to 12L, "downloaded" to 340L, "incomplete" to 3L), files[hash])
+    }
+}
