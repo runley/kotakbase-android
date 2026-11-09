@@ -51,10 +51,16 @@ immersive mode; keyboard shortcuts → gestures.
 
 - Plays Sintel from its torrent (web seed) within ~2 s of start; seeking works over HTTP ranges.
 - Folding/unfolding keeps playing without recreating the activity (`configChanges` in the manifest).
-- Hardware decoding (`mediacodec`, `mediacodec-copy`) deadlocks on the emulator when folding swaps the surface;
-  software decoding doesn't. Retry on the real Fold.
-- With software decoding the emulator draws a grid of thin lines over the video. It's probably the emulator's software
-  GPU (SwiftShader); check on the Fold or with `emulator -gpu host`.
+- Hardware decoding (`mediacodec`) deadlocks on the emulator when folding swaps the surface, and software decoding
+  draws a grid of lines there. Both are emulator-only: on the Pixel 10 Pro Fold, `mediacodec` plays cleanly and
+  survives closed → open (`--es hwdec mediacodec`; the spike still defaults to `no`).
+- When the screen goes away (phone locks on fold), mpv falls back to software decoding and keeps decoding in the
+  background. The player must pause video (or `vid=no`) when the surface is gone and re-enable `hwdec` when it's back.
+- Real swarm: 32 peers, ~4.6 MB/s, but **31 s to first frame**. Sintel's index (`moov`) is at the end of the file, so mpv
+  waits for the last pieces while sequential download fetches from the start. The real stream should fetch the file's
+  first and last pieces first (and cancel stale waits on seek).
+- Memory on the Fold with hardware decoding: ~280 MB PSS, of which ~150 MB is GPU buffers (mpv's `vo=gpu` at the
+  inner screen's resolution). Try `vo=gpu-next` / lower FBO precision before settling.
 - Memory while playing: ~149 MB PSS after capping mpv's demuxer cache (default was ~296 MB).
 - libass found no fontconfig and uses a fallback font: anime subs need a bundled fallback (incl. CJK) plus
   the fonts embedded in MKVs.

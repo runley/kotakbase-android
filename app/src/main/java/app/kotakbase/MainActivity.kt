@@ -43,7 +43,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, MPVLib.EventObserver {
         mpv.setOptionString("opengl-es", "yes")
         // shortcut: software decoding. On the emulator, both mediacodec modes deadlock in detachSurface() when folding swaps
         // the surface; retry hardware decoding on the real Fold before settling on this (it costs battery).
-        mpv.setOptionString("hwdec", "no")
+        mpv.setOptionString("hwdec", intent.getStringExtra("hwdec") ?: "no") // --es hwdec mediacodec to try it
         // the torrent on disk is the buffer; mpv's own network cache (150 MiB by default) would only duplicate it in RAM
         mpv.setOptionString("demuxer-max-bytes", "32MiB")
         mpv.setOptionString("demuxer-max-back-bytes", "8MiB")
