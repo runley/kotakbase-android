@@ -40,8 +40,14 @@ immersive mode; keyboard shortcuts → gestures.
 
 ## Phases
 
-0. **Spike** (this commit): torrent → local HTTP → libmpv, fold/unfold mid-playback. ✅ on emulator.
-1. Browse: AniList/MAL, home, show page, lists, settings, languages (anime and manga modes).
+0. **Spike**: torrent → local HTTP → libmpv, fold/unfold mid-playback. ✅ emulator + Pixel 10 Pro Fold
+   (`adb shell am start -n app.kotakbase/.SpikeActivity`).
+1. **Browse** ✅: AniList home rows (cached like desktop), View More, search with filters, show and manga pages
+   (your list, progress, "already watched", ratings, episodes, Related, Similar), Your List, Settings → Language,
+   anime ⇄ manga switch, all 9 languages from the desktop's translations (`node scripts/locales.mjs` to refresh).
+   Unfolded, a show opens beside the page; folding moves it to its own page. ~128 MB while browsing.
+   Left for later phases: Recommended/"Because you watched" rows, the home feature box and Airing today, schedule,
+   history, stats, episode thumbnails (ani.zip), MyAnimeList fallback, and the settings that belong to later features.
 2. Extensions in QuickJS: torrent search + Auto Select, manga search/chapters/pages.
 3. Player (gestures, chapters, PiP, Fold layouts) and manga reader.
 4. Sync, downloads (foreground service), Watch Together against desktop.

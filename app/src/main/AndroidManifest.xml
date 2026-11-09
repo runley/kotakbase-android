@@ -4,16 +4,23 @@
 
     <application
         android:label="Kotakbase"
-        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
-        <!-- configChanges: folding/unfolding resizes the window instead of restarting the activity (and playback) -->
+        android:theme="@android:style/Theme.Material.NoActionBar">
+        <!-- configChanges: folding/unfolding resizes the window instead of recreating the activity (and playback) -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboardHidden">
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboardHidden"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- the phase 0 spike, kept for the player work: adb shell am start -n app.kotakbase/.SpikeActivity -->
+        <activity
+            android:name=".SpikeActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboardHidden" />
     </application>
 </manifest>

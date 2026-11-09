@@ -1,10 +1,11 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "app.kotakbase"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.kotakbase"
@@ -14,6 +15,7 @@ android {
         versionName = "0.1.0"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") } // the Fold, and the emulator
     }
+    buildFeatures { compose = true }
 }
 
 dependencies {
@@ -21,4 +23,12 @@ dependencies {
     implementation("org.libtorrent4j:libtorrent4j:2.1.0-39")
     implementation("org.libtorrent4j:libtorrent4j-android-arm64:2.1.0-39")
     implementation("org.libtorrent4j:libtorrent4j-android-x86_64:2.1.0-39")
+
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("io.coil-kt.coil3:coil-compose:3.6.3")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3") // also brings OkHttp, used for AniList
+
+    testImplementation("junit:junit:4.13.2")
 }
