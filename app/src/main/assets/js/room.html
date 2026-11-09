@@ -26,22 +26,24 @@ const getPlayer = () => P.open ? { video, buffering: P.buffering } : null
 
 let room = null
 const snapshot = () => room && {
-  code: room.code, formatted: formatCode(room.code), invite: inviteLink(room.code), me: room.me, host: room.host, isHost: room.isHost(),
+  code: room.code, pin: room.pin, formatted: formatCode(room.code), invite: inviteLink(room.code), me: room.me, host: room.host, isHost: room.isHost(),
   members: room.members().map(m => ({ id: m.id, name: m.name, known: !!m.known, buffering: !!m.buffering, key: m.key ?? null })),
   load: room.load, net: room.net, problem: room.problem, chat: room.chat()
 }
 const changed = () => Native.changed(JSON.stringify(snapshot()))
 
 window.__room = {
-  async open (code, name, device) {
+  // pin and title: a saved room (no fixed host; whoever is there first hosts it, so it isn't claimed here)
+  async open (code, pin, title, name, device) {
     try {
       room = await openRoom({
-        code: code || undefined, name, device, getPlayer,
+        code: code || undefined, pin: pin || null, title: title || null, name, device, getPlayer,
+        onTitle: n => Native.title(n),
         onChange: changed, onChat: changed,
         onLoad: l => Native.load(JSON.stringify(l)),
         onRemoved: banned => { room?.leave(); room = null; Native.removed(banned); changed() }
       })
-      if (!code) room.claim() // created here: you're its host
+      if (!code && !pin) room.claim() // created here: you're its host
       changed()
     } catch (e) { Native.error(String(e?.message ?? e)) }
   },

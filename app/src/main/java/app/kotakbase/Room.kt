@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.webkit.WebViewAssetLoader
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
@@ -38,7 +39,7 @@ object Room {
 
     val active get() = state != null
 
-    fun init(context: Context) { if (!::app.isInitialized) app = context.applicationContext }
+    fun init(context: Context) { if (!::app.isInitialized) { app = context.applicationContext; saved = loadSaved() } }
 
     fun deviceId(): String = Store.string("deviceId")?.trim('"') ?: UUID.randomUUID().toString().also { Store.putString("deviceId", JSONObject.quote(it)) }
     fun name(): String = Store.string("roomName")?.trim('"')?.ifEmpty { null } ?: "${t("Guest")} ${(100..999).random()}"
@@ -58,11 +59,35 @@ object Room {
 
     private fun js(code: String) = main.post { if (loaded) page().evaluateJavascript(code, null) else { pending += code; page() } }
 
-    /** Creates a room (no code) or joins one by its code; your name is kept for next time. */
-    fun open(code: String?, name: String) {
+    // ---- saved rooms (desktop savedRooms): a code and PIN kept on this device, newest first, under the desktop's key ----
+
+    /** A saved room; name null until someone in it tells us (joined with just its code and PIN). */
+    data class Saved(val code: String, val pin: String, val name: String?)
+    var saved by mutableStateOf(emptyList<Saved>())
+        private set
+    private var joining: Saved? = null // the saved room being entered, to keep once its name is known
+
+    private fun loadSaved() = runCatching {
+        JSONArray(Store.string("savedRooms") ?: "[]").let { a -> List(a.length()) { a.getJSONObject(it) } }
+            .map { Saved(it.getString("code"), it.getString("pin"), it.optString("name").ifEmpty { null }) }
+    }.getOrDefault(emptyList())
+    private fun storeSaved(list: List<Saved>) {
+        saved = list
+        Store.putString("savedRooms", JSONArray(list.map { JSONObject().put("code", it.code).put("pin", it.pin).put("name", it.name) }).toString())
+    }
+    fun saveRoom(r: Saved) = storeSaved(listOf(r) + saved.filter { it.code != r.code })
+    fun forget(code: String) = storeSaved(saved.filter { it.code != code })
+    fun title(r: Saved) = r.name ?: formatCode(r.code)
+
+    /** Creates a room (no code) or joins one by its code; savedRoom: with its PIN. Your name is kept for next time. */
+    fun open(code: String?, name: String, savedRoom: Saved? = null) {
         error = null
         Store.putString("roomName", JSONObject.quote(name))
-        js("__room.open(${JSONObject.quote(code ?: "")}, ${JSONObject.quote(name)}, ${JSONObject.quote(deviceId())})")
+        // joined with a code and PIN: kept once someone there tells us its name, so a mistyped PIN isn't kept
+        joining = savedRoom
+        if (savedRoom?.name != null) saveRoom(savedRoom)
+        js("__room.open(${JSONObject.quote(code ?: "")}, ${JSONObject.quote(savedRoom?.pin ?: "")}, ${JSONObject.quote(savedRoom?.name ?: "")}, " +
+            "${JSONObject.quote(name)}, ${JSONObject.quote(deviceId())})")
     }
     fun leave() = js("__room.leave()")
     fun say(text: String) = js("__room.say(${JSONObject.quote(text)})")
@@ -91,6 +116,8 @@ object Room {
         @JavascriptInterface fun ready() = main.post { loaded = true; pending.forEach { page().evaluateJavascript(it, null) }; pending.clear() }.let { }
         @JavascriptInterface fun changed(json: String) { main.post { state = runCatching { JSONObject(json) }.getOrNull() } }
         @JavascriptInterface fun error(message: String) { main.post { error = t("Couldn't start Watch Together: {error}", "error" to message) } }
+        // someone in a saved room joined with just its code and PIN told us its name: keep it
+        @JavascriptInterface fun title(name: String) { main.post { joining?.let { saveRoom(it.copy(name = name.take(40))) } } }
         @JavascriptInterface fun removed(banned: Boolean) { main.post { error = if (banned) t("The host banned you from this room.") else t("The host removed you from the room.") } }
         // the host started something: play it here (the host's player is the clock, so it starts wherever they are)
         @JavascriptInterface fun load(json: String) {

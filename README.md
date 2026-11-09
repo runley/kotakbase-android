@@ -86,7 +86,8 @@ immersive mode; keyboard shortcuts → gestures.
    - Watch Together: the desktop's `room.js` and `room-net.js` run unchanged in an invisible WebView (`room.html`,
      served from the app's assets on a secure origin for WebRTC), bridged to the native player. Tested between the
      emulator and the Fold: joining, chat, the host starting an episode (the other opens it, in step within a second),
-     a pause on the guest pausing the host. Invite links `kotakbase://join/CODE`. Not yet: saved rooms with a PIN, ban,
+     a pause on the guest pausing the host. Invite links `kotakbase://join/CODE`. Saved rooms with a PIN (desktop `savedRooms`, same key and
+     format): tested between the emulator and the Fold, joined with just the code and PIN. Not yet: ban,
      chat over the player; not tried against the desktop app itself (same code, so it should).
 5. **Release and updates** ✅: `./gradlew assembleRelease` makes a signed, R8-shrunk, arm64-only APK (~44 MB). Settings →
    Updates (desktop wording) and a check at start (every 6 h at most, release builds only) read this repo's latest
