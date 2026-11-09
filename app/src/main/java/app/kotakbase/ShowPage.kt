@@ -38,6 +38,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,12 +64,33 @@ fun ShowPage(nav: Nav, id: Int) {
     Store.version // redraw when your list, progress or rating changes
     val mg = m.isManga
     val p = Store.progress(mg)[id]
-    val tabs = if (mg) listOf("Related", "Similar") else listOf("Episodes", "Related", "Similar")
+    Extensions.version.intValue // redraw when extensions are added or switched
+    val reads = mg && Extensions.hasManga()
+    val tabs = if (mg) listOfNotNull(if (reads) "Chapters" else null, "Related", "Similar") else listOf("Episodes", "Related", "Similar")
     var tab by rememberSaveable(id) { mutableStateOf(0) }
+    if (tab >= tabs.size) tab = 0
+    var reading by remember { mutableStateOf<Triple<Reading.Series, List<org.json.JSONObject>, Int>?>(null) }
+    val scope = rememberCoroutineScope()
+    var readError by remember { mutableStateOf<String?>(null) }
 
+    reading?.let { (s, rows, i) -> Reader(m, s, rows, i) { reading = null } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Head(m, p) }
-        item { Actions(m, p) }
+        item {
+            Actions(m, p, watch = { nav.go(Page.Sources(m.id, p?.episode ?: 1)) }, read = if (!reads) null else { n ->
+                // "Read chapter n": the first chapter numbered n there is, or the one after it
+                scope.launch {
+                    runCatching {
+                        val s = Reading.seriesFor(m) ?: throw Exception(t("None of your manga extensions has this manga."))
+                        val rows = Reading.chapters(s)
+                        val i = rows.indexOfFirst { !it.isNull("number") && it.getDouble("number") >= n }
+                        if (i < 0) throw Exception(t("Nothing here yet."))
+                        reading = Triple(s, rows, i)
+                    }.onFailure { readError = it.message }
+                }
+            })
+        }
+        readError?.let { item { Text(it, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error) } }
         item {
             FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 m.genres.forEach { g -> AssistChip({ nav.go(Page.Search(genre = g)) }, { Text(t(g)) }) }
@@ -81,6 +104,7 @@ fun ShowPage(nav: Nav, id: Int) {
         }
         when (tabs[tab]) {
             "Episodes" -> items((1..minOf(m.epCount, 2000)).toList(), key = { "ep$it" }) { EpisodeRow(m, p, it) }
+            "Chapters" -> item(key = "chapters") { ChapterList(m, p) { s, rows, i -> reading = Triple(s, rows, i) } }
             else -> item(key = tabs[tab]) { Shows(nav, m, tabs[tab]) }
         }
     }
@@ -120,11 +144,16 @@ private fun Head(m: Media, p: Store.Progress?) {
 }
 
 @Composable
-private fun Actions(m: Media, p: Store.Progress?) {
+private fun Actions(m: Media, p: Store.Progress?, watch: () -> Unit, read: ((Int) -> Unit)?) {
     val mg = m.isManga
     FlowRow(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-        val read = chaptersRead(p)
-        if (mg && read < m.epCount) Button({ Store.markWatched(m, read + 1) }) { Text(t("Mark chapter {n} read", "n" to read + 1)) }
+        val done = chaptersRead(p)
+        // with a manga extension the button reads the chapter; without one it marks it read
+        if (mg && done < m.epCount) Button({ if (read != null) read(done + 1) else Store.markWatched(m, done + 1) }) {
+            Text(if (read != null) t("Read chapter {n}", "n" to done + 1) else t("Mark chapter {n} read", "n" to done + 1))
+        }
+        if (!mg && m.status != "NOT_YET_RELEASED") Button(watch) { Text("▶ " + if (p != null) t("Continue · Ep {n}", "n" to p.episode) else t("Watch")) }
+        val read = done
         val inList = m.id in Store.myList(mg)
         FilledIconToggleButton(inList, { Store.toggleList(m.id, mg) }) { Icon(Icons.bookmark, t("Save to Your List")) }
         if (!mg) {

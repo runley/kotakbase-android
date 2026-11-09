@@ -15,7 +15,7 @@ android {
         versionName = "0.1.0"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") } // the Fold, and the emulator
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 }
 
 dependencies {
@@ -29,6 +29,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("io.coil-kt.coil3:coil-compose:3.6.3")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3") // also brings OkHttp, used for AniList
+    implementation("io.github.dokar3:quickjs-kt-android:1.0.18") // runs extensions and the desktop's shared JS
 
     testImplementation("junit:junit:4.13.2")
 }

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Sintel (test)",
+    "id": "test-sintel",
+    "version": "1.0.0",
+    "type": "torrent",
+    "accuracy": "high",
+    "icon": "",
+    "update": "http://localhost:8099/index.json",
+    "code": "http://localhost:8099/sintel.js"
+  },
+  {
+    "name": "MangaDex (test)",
+    "id": "test-mangadex",
+    "version": "1.0.0",
+    "type": "manga",
+    "accuracy": "high",
+    "icon": "",
+    "update": "http://localhost:8099/index.json",
+    "code": "http://localhost:8099/mangadex.js"
+  }
+]

@@ -55,6 +55,7 @@ sealed interface Page {
     data object Settings : Page
     data class More(val kind: String) : Page
     data class Show(val id: Int) : Page
+    data class Sources(val id: Int, val episode: Int) : Page
 }
 
 /**
@@ -86,6 +87,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Store.init(this)
         I18n.init(this)
+        Shared.init(this)
+        Extensions.init(this)
         enableEdgeToEdge()
         setContent { MaterialTheme(colorScheme = colors) { Surface(Modifier.fillMaxSize(), color = Bg) { App() } } }
     }
@@ -111,6 +114,7 @@ fun App() {
             Page.Settings -> SettingsPage()
             is Page.More -> MorePage(nav, p.kind)
             is Page.Show -> ShowPage(nav, p.id)
+            is Page.Sources -> SourcesPage(nav, p.id, p.episode)
         }
     }
 
