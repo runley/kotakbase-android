@@ -36,6 +36,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -80,15 +81,16 @@ class PlayerActivity : ComponentActivity() {
     lateinit var mpv: Mpv
 
     companion object {
-        fun start(context: Context, id: Int, episode: Int, link: String) = context.startActivity(
-            Intent(context, PlayerActivity::class.java).putExtra("id", id).putExtra("episode", episode).putExtra("link", link))
+        fun start(context: Context, id: Int, episode: Int, link: String, fileIndex: Int = -1) = context.startActivity(
+            Intent(context, PlayerActivity::class.java).putExtra("id", id).putExtra("episode", episode).putExtra("link", link).putExtra("file", fileIndex)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) // its own task (picture-in-picture); also from Watch Together, outside an activity
     }
 
     private fun read(i: Intent) = Play(i.getIntExtra("id", 0), i.getIntExtra("episode", 1), i.getStringExtra("link").orEmpty(), i.getIntExtra("file", -1))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Store.init(this); I18n.init(this); Shared.init(this); Extensions.init(this); Torrent.init(this)
+        Store.init(this); I18n.init(this); Shared.init(this); Extensions.init(this); Torrent.init(this); Auth.init(this); Downloads.init(this); Room.init(this)
         mpv = Mpv(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -158,6 +160,7 @@ fun PlayerScreen(a: PlayerActivity) {
     var episode by remember(play) { mutableIntStateOf(play.episode) }
     var fileIndex by remember(play) { mutableIntStateOf(play.fileIndex) }
     var stream by remember(play) { mutableStateOf<Torrent.Loaded?>(null) }
+    var local by remember(play) { mutableStateOf<String?>(null) } // a downloaded episode's file, playing instead of a stream
     var numbering by remember(play) { mutableStateOf(JSONObject()) }
     var next by remember(play) { mutableStateOf<Int?>(null) } // the next episode's file in this torrent
     var error by remember(play) { mutableStateOf<String?>(null) }
@@ -169,6 +172,16 @@ fun PlayerScreen(a: PlayerActivity) {
     LaunchedEffect(play, episode, m != null) {
         if (m == null) return@LaunchedEffect
         error = null
+        local = null
+        // a downloaded episode: straight from the phone (this one, or the next one Next moved to)
+        (if (episode == play.episode && play.link.startsWith("/")) play.link else Downloads.local(m.id, episode))?.let { path ->
+            local = path
+            // in a room as host: the others stream the torrent this download came from
+            Downloads.source(m.id, episode)?.let { (link, index) -> Room.played(m.id, episode, link, m.title, index, JSONObject()) }
+            val prev = Store.progress(false)[m.id]
+            mpv.load(path, if (prev?.episode == episode && prev.time < prev.duration * 0.9) prev.time else 0.0)
+            return@LaunchedEffect
+        }
         runCatching {
             val t = Torrent.open(play.link)
             when (Shared.call("api.refuse(${lit(JSONArray(t.files).toString())})") as? String) {
@@ -179,6 +192,8 @@ fun PlayerScreen(a: PlayerActivity) {
             numbering = JSONObject().put("abs", ids.opt("absoluteEpisodeNumber")).put("tvdbSeason", ids.opt("tvdbSeason")).put("tvdbSeasonEpisode", ids.opt("tvdbSeasonEpisode"))
             if (fileIndex < 0) fileIndex = (Shared.call("api.fileFor(${lit(JSONArray(t.files).toString())}, $episode, ${lit(numbering.toString())})") as Number).toInt()
             stream = t
+            // in a Watch Together room as host, this is what everyone watches now (shared by info hash, not .torrent links)
+            Room.played(m.id, episode, if (play.link.startsWith("http")) t.hash else play.link, m.title, fileIndex, numbering)
             val prev = Store.progress(false)[m.id]
             mpv.load(Torrent.play(t, fileIndex), if (prev?.episode == episode && prev.time < prev.duration * 0.9) prev.time else 0.0)
             // is the next episode in this torrent (a season pack)? Then Next plays it from here
@@ -221,8 +236,9 @@ fun PlayerScreen(a: PlayerActivity) {
     }
 
     // progress every few seconds (and the next episode's file starts downloading near the end)
-    LaunchedEffect(play, episode, stream) {
-        val t = stream ?: return@LaunchedEffect
+    LaunchedEffect(play, episode, stream, local) {
+        val t = stream
+        if (t == null && local == null) return@LaunchedEffect
         var logged = false
         var prefetched = false
         while (true) {
@@ -232,7 +248,7 @@ fun PlayerScreen(a: PlayerActivity) {
             val credits = skips.firstOrNull { it.kind == "ed" && it.start > d * 0.75 }?.start
             val watched = Store.saveProgress(m, episode, mpv.time, d, credits)
             if (watched && !logged) { logged = true; Store.logWatched(m, episode) }
-            if (!prefetched && next != null && (watched || mpv.time > d * 0.85)) { prefetched = true; Torrent.play(t, fileIndex, also = next) }
+            if (t != null && !prefetched && next != null && (watched || mpv.time > d * 0.85)) { prefetched = true; Torrent.play(t, fileIndex, also = next) }
         }
     }
 
@@ -240,9 +256,16 @@ fun PlayerScreen(a: PlayerActivity) {
         val mm = m ?: return
         if (episode >= mm.epCount) return a.finish()
         val n = next
-        if (n != null) { fileIndex = n; next = null; episode++ } else a.openSources(mm.id, episode + 1)
+        // from the same season pack, or the next episode's download; else its source picker
+        if (n != null) { fileIndex = n; next = null; episode++ }
+        else if (Downloads.local(mm.id, episode + 1) != null) episode++
+        else a.openSources(mm.id, episode + 1)
     }
     LaunchedEffect(mpv.ended) { if (mpv.ended && m != null && mpv.duration > 0) { Store.saveProgress(m, episode, mpv.duration, mpv.duration, null); goNext() } }
+
+    // Watch Together: the room sees this player, and drives it when someone else is the host
+    DisposableEffect(Unit) { Room.mpv = mpv; onDispose { if (Room.mpv === mpv) Room.mpv = null; Room.push(false, 0.0, 0.0, true, false) } }
+    LaunchedEffect(Room.active) { while (Room.active) { Room.push(true, mpv.duration, mpv.time, mpv.paused, mpv.buffering || mpv.duration <= 0); delay(200) } }
 
     // the controls hide after a few seconds of playing untouched
     LaunchedEffect(controls, touched, mpv.paused) { if (controls && !mpv.paused) { delay(3500); controls = false } }
@@ -262,7 +285,7 @@ fun PlayerScreen(a: PlayerActivity) {
                     onDoubleTap = { o -> mpv.seekBy(if (o.x < size.width / 2) -10.0 else 10.0); touched++ }
                 )
             })
-            if ((mpv.buffering || mpv.duration <= 0) && error == null) Text(if (stream == null) t("Loading torrent…") else t("Buffering…") + "  " + Torrent.status(),
+            if ((mpv.buffering || mpv.duration <= 0) && error == null) Text(if (stream == null && local == null) t("Loading torrent…") else t("Buffering…") + "  " + Torrent.status(),
                 Modifier.align(Alignment.Center).background(Color(0x99000000)).padding(12.dp), color = TextColor)
         }
     }

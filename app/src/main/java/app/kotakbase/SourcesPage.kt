@@ -1,6 +1,11 @@
 package app.kotakbase
 
-import android.content.Intent
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -53,7 +58,7 @@ private class Found(val results: List<Extensions.Source>, val auto: Int, val dea
  * ranked like desktop's (your languages, the group used last time), and Auto Select takes the top one that can stream.
  */
 @Composable
-fun SourcesPage(nav: Nav, id: Int, start: Int) {
+fun SourcesPage(nav: Nav, id: Int, start: Int, download: String? = null) {
     val context = LocalContext.current
     val media by loading(id) { AniList.media(id) }
     val m = media?.getOrNull() ?: return Column(Modifier.padding(16.dp)) { media?.exceptionOrNull()?.let { ErrorText(it) } ?: MutedText(t("Loading…")) }
@@ -96,9 +101,27 @@ fun SourcesPage(nav: Nav, id: Int, start: Int) {
         found = Found(List(list.length()) { Extensions.Source(list.getJSONObject(it)) }, r.optInt("auto", -1), r.optInt("dead"))
     }
 
+    var notice by remember { mutableStateOf<String?>(null) }
+    val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {} // the download notification
+    val scope = rememberCoroutineScope()
     fun play(link: String, source: Extensions.Source?) {
         source?.group?.let { g -> Store.putString("sources", (Store.string("sources")?.let(::JSONObject) ?: JSONObject()).put(id.toString(), JSONObject().put("group", g)).toString()) }
-        PlayerActivity.start(context, id, episode, link)
+        if (download == null) return PlayerActivity.start(context, id, episode, link)
+        // a season pack, from the show's Download button: every episode out so far; otherwise the one episode (desktop startDownload)
+        val season = download == "season" && source?.type == "batch"
+        if (Build.VERSION.SDK_INT >= 33) askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
+        notice = t("Loading torrent…")
+        scope.launch {
+            notice = runCatching {
+                val eps = (if (season) 1..m.aired else episode..episode).map { e ->
+                    val ids = Shared.mappings(id, e)
+                    e to JSONObject().put("abs", ids.opt("absoluteEpisodeNumber")).put("tvdbSeason", ids.opt("tvdbSeason")).put("tvdbSeasonEpisode", ids.opt("tvdbSeasonEpisode"))
+                }
+                val n = Downloads.add(id, m.title, m.coverXl, link, eps)
+                if (n < 0) t("That torrent is playing right now, so its download starts when you close the player.")
+                else t("Downloading {episodes}. See them under Downloads.", "episodes" to t("{n} episodes", "n" to n))
+            }.getOrElse { t("Couldn't download: {error}", "error" to (it.message ?: it.toString())) }
+        }
     }
 
     val words = filter.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
@@ -107,12 +130,17 @@ fun SourcesPage(nav: Nav, id: Int, start: Int) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(m.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                if (download != null) Text(if (download == "season") t("Download: {title}", "title" to m.title) else t("Download this episode"), fontWeight = FontWeight.Bold)
+                if (download == "season") MutedText(t("Pick a batch (the folder icon) to download every episode out so far, or a single release for just this episode.")) else if (download != null) MutedText(t("Pick a source to download this episode."))
+                notice?.let { Text(it, color = Accent) }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     var typed by remember(episode) { mutableStateOf(episode.toString()) }
                     OutlinedTextField(typed, { v -> typed = v.filter(Char::isDigit).take(5); typed.toIntOrNull()?.takeIf { it in 1..m.epCount }?.let { episode = it } },
                         Modifier.width(120.dp), label = { Text(t("Episode")) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                     val auto = found?.takeIf { done && it.auto >= 0 }
-                    Button({ auto?.let { play(it.results[it.auto].link, it.results[it.auto]) } }, Modifier.weight(1f), enabled = auto != null) {
+                    // downloading a season: a batch first, if there is one
+                    val pick = auto?.let { f -> if (download == "season") f.results.firstOrNull { it.type == "batch" } ?: f.results[f.auto] else f.results[f.auto] }
+                    Button({ pick?.let { play(it.link, it) } }, Modifier.weight(1f), enabled = auto != null) {
                         Text(if (!done) t("Searching…") else if (auto != null) t("Auto Select Torrent") else t("No sources"))
                     }
                 }

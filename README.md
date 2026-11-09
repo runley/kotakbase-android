@@ -72,7 +72,22 @@ immersive mode; keyboard shortcuts → gestures.
    Not yet: brightness/volume swipes, zoom in the reader, the episode list inside the player, subtitles from separate
    files in the torrent, a CJK fallback font (Roboto only; MKVs bring their own fonts), the two-page spread checked on
    a real multi-page manga (the test title's chapters are single pages). Memory on the Fold while playing: ~362 MB.
-4. Sync, downloads (foreground service), Watch Together against desktop.
+4. **Sync, downloads, Watch Together** ✅:
+   - AniList: sign-in through AniList's page in the app (its redirect with the token caught, as on desktop; client id
+     from `secrets.properties`, which `scripts/sync-desktop.mjs` copies from the desktop's git-ignored secrets). The sync
+     runs the desktop's own rules (`anilist-sync.js`: merge, pushTarget, localEntry, toLocal, saveVars) unchanged; the
+     loop around them (pull, persisted outbox paced like desktop, the first-sync question) is `AniSync.kt`. Anime and
+     manga lists. Not tested with a real account (needs your password). The token is in the app's private storage
+     (desktop encrypts it with the OS; shortcut: use the Android Keystore if that matters).
+   - Downloads: one entry per torrent with the episodes picked (desktop `chooseFiles`), a foreground service with a
+     notification, pause/resume/delete, resumed at start, and downloaded episodes play from the phone (Watch, Next).
+     They're kept in the app's internal storage: libtorrent's memory-mapped files crashed Android's shared-storage
+     service under Android/data. Not yet: a folder picker.
+   - Watch Together: the desktop's `room.js` and `room-net.js` run unchanged in an invisible WebView (`room.html`,
+     served from the app's assets on a secure origin for WebRTC), bridged to the native player. Tested between the
+     emulator and the Fold: joining, chat, the host starting an episode (the other opens it, in step within a second),
+     a pause on the guest pausing the host. Invite links `kotakbase://join/CODE`. Not yet: saved rooms with a PIN, ban,
+     chat over the player; not tried against the desktop app itself (same code, so it should).
 5. Signed release APK on GitHub + in-app update check.
 
 ## Spike findings

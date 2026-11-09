@@ -55,7 +55,10 @@ sealed interface Page {
     data object Settings : Page
     data class More(val kind: String) : Page
     data class Show(val id: Int) : Page
-    data class Sources(val id: Int, val episode: Int) : Page
+    /** download: "season" (every episode out so far, from a batch) or "episode"; null to play */
+    data class Sources(val id: Int, val episode: Int, val download: String? = null) : Page
+    data object Downloads : Page
+    data class Together(val invite: String? = null) : Page
 }
 
 /**
@@ -90,12 +93,19 @@ class MainActivity : ComponentActivity() {
         Shared.init(this)
         Extensions.init(this)
         Torrent.init(this)
+        Auth.init(this)
+        Downloads.init(this)
+        Room.init(this)
+        AniSync.anime.start(); AniSync.manga.start()
         enableEdgeToEdge()
+        Invites.take(intent)
         setContent { MaterialTheme(colorScheme = colors) { Surface(Modifier.fillMaxSize(), color = Bg) { App() } } }
     }
+
+    override fun onNewIntent(intent: android.content.Intent) { super.onNewIntent(intent); Invites.take(intent) }
 }
 
-private val TABS = listOf(Page.Home, Page.Search(), Page.MyList, Page.Settings)
+private val TABS = listOf(Page.Home, Page.Search(), Page.MyList, Page.Downloads, Page.Together())
 
 @Composable
 fun App() {
@@ -104,6 +114,10 @@ fun App() {
     LaunchedEffect(wide) { nav.resize(wide) }
     nav.wide = wide
     BackHandler(nav.canGoBack) { nav.back() }
+    SignInDialog()
+    FirstSyncDialog()
+    // an invite link opened the app: that room, on the Watch Together page
+    LaunchedEffect(Invites.code) { Invites.code?.let { nav.tab(Page.Together(it)); Invites.code = null } }
     // the player's Previous/Next for an episode that isn't in its torrent: that episode's source picker
     LaunchedEffect(PlayerRequests.sources) {
         val p = PlayerRequests.sources ?: return@LaunchedEffect
@@ -121,22 +135,24 @@ fun App() {
             Page.Settings -> SettingsPage()
             is Page.More -> MorePage(nav, p.kind)
             is Page.Show -> ShowPage(nav, p.id)
-            is Page.Sources -> SourcesPage(nav, p.id, p.episode)
+            is Page.Sources -> SourcesPage(nav, p.id, p.episode, p.download)
+            Page.Downloads -> DownloadsPage(nav)
+            is Page.Together -> TogetherPage(nav, p.invite)
         }
     }
 
-    val tabLabels = listOf(t("Home"), if (Store.manga) t("Search manga") else t("Search anime"), t("Your List"), t("Settings"))
-    val tabIcons = listOf(Icons.home, Icons.search, Icons.bookmark, Icons.settings)
+    val tabLabels = listOf(t("Home"), if (Store.manga) t("Search manga") else t("Search anime"), t("Your List"), t("Downloads"), t("Watch Together"))
+    val tabIcons = listOf(Icons.home, Icons.search, Icons.bookmark, Icons.download, Icons.people)
     val current = TABS.indexOfFirst { it::class == nav.stack.first()::class }
 
     Row(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-        if (wide) NavigationRail(containerColor = Bg, header = { ModeSwitch(nav, compact = true) }) {
+        if (wide) NavigationRail(containerColor = Bg, header = { Column { ModeSwitch(nav, compact = true) } }) {
             TABS.forEachIndexed { i, tab ->
                 NavigationRailItem(i == current, { nav.tab(tab) }, { Icon(tabIcons[i], tabLabels[i]) }, label = { Text(tabLabels[i]) })
             }
         }
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            if (!wide) ModeSwitch(nav, compact = false)
+            if (!wide) Row(verticalAlignment = Alignment.CenterVertically) { ModeSwitch(nav, compact = false) }
             Row(Modifier.weight(1f)) {
                 // unfolded: the page takes the whole width until a show is opened beside it
                 val side = nav.side.takeIf { wide }
@@ -168,5 +184,9 @@ fun ModeSwitch(nav: Nav, compact: Boolean) {
             Text(if (Store.manga) "m" else "k", color = Bg, fontWeight = FontWeight.Black, fontSize = 18.sp)
         }
         if (!compact) Text((if (Store.manga) "mangal" else "kotak") + "base", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+    }
+    // Settings sits by the logo, leaving the bar to the five pages
+    androidx.compose.material3.IconButton({ nav.tab(Page.Settings) }, Modifier.padding(start = if (compact) 16.dp else 0.dp)) {
+        Icon(Icons.settings, t("Settings"), tint = if (nav.stack.first() == Page.Settings) Accent else Muted)
     }
 }

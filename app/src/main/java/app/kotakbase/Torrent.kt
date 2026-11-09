@@ -29,12 +29,14 @@ import kotlin.concurrent.thread
  */
 object Torrent {
     private lateinit var dir: File
-    private val session by lazy { SessionManager().apply { start() } }
+    /** One libtorrent session for the stream and the downloads. */
+    val session by lazy { SessionManager().apply { start() } }
     private val lock = Mutex()
     private lateinit var server: ServerSocket
     private val requests = ConcurrentHashMap<Int, AtomicInteger>() // file index → latest request, to drop stale ones
 
-    class Loaded(val link: String, val info: TorrentInfo, val handle: TorrentHandle) {
+    /** owned: a download's torrent the player reads from, whose files and other episodes are left alone. */
+    class Loaded(val link: String, val info: TorrentInfo, val handle: TorrentHandle, val dir: File, val owned: Boolean = false) {
         val hash: String = info.infoHash().toHex()
         /** The torrent's files as episode.js reads them. */
         val files = (0 until info.numFiles()).map { org.json.JSONObject().put("name", info.files().filePath(it)).put("index", it) }
@@ -56,16 +58,15 @@ object Torrent {
     suspend fun open(link: String): Loaded = lock.withLock {
         current?.takeIf { it.link == link }?.let { return it }
         withContext(Dispatchers.IO) {
-            val bytes = if (link.startsWith("magnet:")) session.fetchMagnet(link, 120, dir) ?: throw Exception(t("Loading torrent…") + " ✕")
-            else AniList.http.newCall(Request.Builder().url(link).build()).execute().use { it.body?.bytes() ?: throw Exception("HTTP ${it.code}") }
-            val info = TorrentInfo(bytes)
+            val info = info(link)
             current?.takeIf { it.hash == info.infoHash().toHex() }?.let { return@withContext it }
             drop()
+            Downloads.handle(info.infoHash().toHex())?.let { return@withContext Loaded(link, info, it, Downloads.dir, owned = true).also { l -> current = l } }
             // nothing downloads until a file is picked
             session.download(info, dir, null, Array(info.numFiles()) { Priority.IGNORE }, null, TorrentFlags.SEQUENTIAL_DOWNLOAD)
             var handle: TorrentHandle? = null
             while (handle == null) { handle = session.find(info.infoHash()); if (handle == null) Thread.sleep(50) }
-            Loaded(link, info, handle).also { current = it }
+            Loaded(link, info, handle, dir).also { current = it }
         }
     }
 
@@ -74,7 +75,8 @@ object Torrent {
      * file's index before playing, which MP4 keeps at the end and MKV's seek index too. Returns the URL to play.
      */
     fun play(t: Loaded, index: Int, also: Int? = null): String {
-        t.handle.prioritizeFiles(Array(t.info.numFiles()) { if (it == index || it == also) Priority.DEFAULT else Priority.IGNORE })
+        if (t.owned) listOfNotNull(index, also).forEach { t.handle.filePriority(it, Priority.TOP_PRIORITY) } // the download's other episodes carry on
+        else t.handle.prioritizeFiles(Array(t.info.numFiles()) { if (it == index || it == also) Priority.DEFAULT else Priority.IGNORE })
         val first = t.info.mapFile(index, 0, 1).piece()
         val last = t.info.mapFile(index, (t.info.files().fileSize(index) - 1).coerceAtLeast(0), 1).piece()
         for (i in 0..2) if (first + i <= last) t.handle.setPieceDeadline(first + i, i * 100)
@@ -82,13 +84,18 @@ object Torrent {
         return "http://127.0.0.1:${server.localPort}/${t.hash}/$index"
     }
 
+    /** A torrent's metadata: from its .torrent URL, or from peers for a magnet (blocking; call off the main thread). */
+    fun info(link: String): TorrentInfo = TorrentInfo(
+        if (link.startsWith("magnet:")) session.fetchMagnet(link, 120, dir) ?: throw Exception("No peers sent this torrent's file list")
+        else AniList.http.newCall(Request.Builder().url(link).build()).execute().use { it.body?.bytes() ?: throw Exception("HTTP ${it.code}") })
+
     fun status(): String = current?.handle?.status()?.let { "${it.numPeers()} · ${it.downloadRate() / 1024} KB/s" } ?: ""
 
     /** The stream's done with: its torrent and files go (downloads, phase 4, will keep theirs). */
-    suspend fun stop() = lock.withLock { withContext(Dispatchers.IO) { drop() } }
+    suspend fun stop() { lock.withLock { withContext(Dispatchers.IO) { drop() } }; Downloads.streamStopped() }
 
     private fun drop() {
-        current?.let { runCatching { session.remove(it.handle, SessionHandle.DELETE_FILES) } }
+        current?.takeIf { !it.owned }?.let { runCatching { session.remove(it.handle, SessionHandle.DELETE_FILES) } }
         current = null
         requests.clear()
     }
@@ -120,7 +127,7 @@ object Torrent {
             while (pos <= end) {
                 val req = t.info.mapFile(idx, pos, 1)
                 if (!awaitPiece(t, req.piece(), idx, generation)) return
-                val f = file ?: RandomAccessFile(File(dir, t.info.files().filePath(idx)), "r").also { r -> file = r }
+                val f = file ?: RandomAccessFile(File(t.dir, t.info.files().filePath(idx)), "r").also { r -> file = r }
                 val n = minOf(buf.size.toLong(), (t.info.pieceLength() - req.start()).toLong(), end - pos + 1).toInt()
                 f.seek(pos)
                 f.readFully(buf, 0, n)

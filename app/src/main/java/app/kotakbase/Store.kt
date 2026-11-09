@@ -33,6 +33,8 @@ object Store {
     fun putString(key: String, json: String?) {
         prefs.edit().apply { if (json == null) remove(key) else putString(key, json) }.apply()
         version++
+        // your progress, list or ratings changed: AniList sync queues what it needs to send (desktop save())
+        when (key) { "progress", "list", "scores" -> AniSync.anime.changed(); "manga:progress", "manga:list", "manga:scores" -> AniSync.manga.changed() }
     }
 
     private fun k(key: String, mg: Boolean) = if (mg) "manga:$key" else key
@@ -83,9 +85,12 @@ object Store {
     }
 
     /** n onwards unwatched. */
-    fun markUnwatched(m: Media, n: Int) = editProgress(m) {
-        if (n <= 1) remove(m.id.toString())
-        else put(m.id.toString(), JSONObject().apply { put("episode", n); put("time", 0); put("duration", 1); put("at", System.currentTimeMillis()) })
+    fun markUnwatched(m: Media, n: Int) {
+        AniSync.of(m.isManga).unwatch(m.id) // the one change allowed to lower AniList's progress
+        editProgress(m) {
+            if (n <= 1) remove(m.id.toString())
+            else put(m.id.toString(), JSONObject().apply { put("episode", n); put("time", 0); put("duration", 1); put("at", System.currentTimeMillis()) })
+        }
     }
 
     /**

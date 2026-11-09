@@ -67,6 +67,7 @@ class Mpv(context: Context) : SurfaceHolder.Callback, MPVLib.EventObserver {
     fun seek(to: Double) = mpv.command(arrayOf("seek", to.coerceAtLeast(0.0).toString(), "absolute"))
     fun seekBy(by: Double) = mpv.command(arrayOf("seek", by.toString(), "relative"))
     fun pause(on: Boolean) = mpv.setPropertyBoolean("pause", on)
+    fun speed(rate: Double) = mpv.setPropertyDouble("speed", rate) // Watch Together nudges it to catch up with the host
     fun setTrack(kind: String, id: Int?) = mpv.setPropertyString(kind, id?.toString() ?: "no")
     fun selected(kind: String): Int? = mpv.getPropertyString(kind)?.toIntOrNull()
     fun destroy() { mpv.removeObserver(this); mpv.destroy() }

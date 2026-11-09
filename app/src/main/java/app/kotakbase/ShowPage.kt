@@ -71,13 +71,15 @@ fun ShowPage(nav: Nav, id: Int) {
     if (tab >= tabs.size) tab = 0
     var reading by remember { mutableStateOf<Triple<Reading.Series, List<org.json.JSONObject>, Int>?>(null) }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var readError by remember { mutableStateOf<String?>(null) }
 
     reading?.let { (s, rows, i) -> Reader(m, s, rows, i) { reading = null } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Head(m, p) }
         item {
-            Actions(m, p, watch = { nav.go(Page.Sources(m.id, p?.episode ?: 1)) }, read = if (!reads) null else { n ->
+            Actions(m, p, watch = { val ep = p?.episode ?: 1; Downloads.local(m.id, ep)?.let { PlayerActivity.start(context, m.id, ep, it) } ?: nav.go(Page.Sources(m.id, ep)) },
+                download = { nav.go(Page.Sources(m.id, p?.episode ?: 1, "season")) }, read = if (!reads) null else { n ->
                 // "Read chapter n": the first chapter numbered n there is, or the one after it
                 scope.launch {
                     runCatching {
@@ -103,7 +105,7 @@ fun ShowPage(nav: Nav, id: Int) {
             }
         }
         when (tabs[tab]) {
-            "Episodes" -> items((1..minOf(m.epCount, 2000)).toList(), key = { "ep$it" }) { EpisodeRow(m, p, it) }
+            "Episodes" -> items((1..minOf(m.epCount, 2000)).toList(), key = { "ep$it" }) { EpisodeRow(m, p, it) { n -> nav.go(Page.Sources(m.id, n, "episode")) } }
             "Chapters" -> item(key = "chapters") { ChapterList(m, p) { s, rows, i -> reading = Triple(s, rows, i) } }
             else -> item(key = tabs[tab]) { Shows(nav, m, tabs[tab]) }
         }
@@ -144,7 +146,7 @@ private fun Head(m: Media, p: Store.Progress?) {
 }
 
 @Composable
-private fun Actions(m: Media, p: Store.Progress?, watch: () -> Unit, read: ((Int) -> Unit)?) {
+private fun Actions(m: Media, p: Store.Progress?, watch: () -> Unit, download: () -> Unit, read: ((Int) -> Unit)?) {
     val mg = m.isManga
     FlowRow(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
         val done = chaptersRead(p)
@@ -153,6 +155,7 @@ private fun Actions(m: Media, p: Store.Progress?, watch: () -> Unit, read: ((Int
             Text(if (read != null) t("Read chapter {n}", "n" to done + 1) else t("Mark chapter {n} read", "n" to done + 1))
         }
         if (!mg && m.status != "NOT_YET_RELEASED") Button(watch) { Text("▶ " + if (p != null) t("Continue · Ep {n}", "n" to p.episode) else t("Watch")) }
+        if (!mg && m.status != "NOT_YET_RELEASED") FilledTonalIconButton(download) { Icon(Icons.download, t("Download episodes")) }
         val read = done
         val inList = m.id in Store.myList(mg)
         FilledIconToggleButton(inList, { Store.toggleList(m.id, mg) }) { Icon(Icons.bookmark, t("Save to Your List")) }
@@ -185,16 +188,18 @@ private fun NumberField(label: String, value: Int, save: (Int) -> Unit) {
 /** An episode: whether it's watched, and (tap or hold) marking it and the ones before watched, or it and the ones after unwatched. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun EpisodeRow(m: Media, p: Store.Progress?, n: Int) {
+private fun EpisodeRow(m: Media, p: Store.Progress?, n: Int, download: (Int) -> Unit) {
     val watched = p != null && (n < p.episode || isFinished(m, p))
     var menu by remember { mutableStateOf(false) }
     Box {
         Row(Modifier.fillMaxWidth().combinedClickable(onLongClick = { menu = true }) { menu = true }.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Text(t("Episode {n}", "n" to n), Modifier.weight(1f), color = if (n > m.aired) Muted else TextColor)
+            if (Downloads.local(m.id, n) != null) MutedText(t("Downloaded") + "  ")
             if (watched) Icon(Icons.check, null, Modifier.size(18.dp), tint = Accent)
         }
         DropdownMenu(menu, { menu = false }) {
+            DropdownMenuItem({ Text(t("Download this episode")) }, { download(n); menu = false })
             DropdownMenuItem({ Text(t("Mark watched up to episode {n}", "n" to n)) }, { Store.markWatched(m, n); menu = false })
             DropdownMenuItem({ Text(t("Mark unwatched from episode {n}", "n" to n)) }, { Store.markUnwatched(m, n); menu = false })
         }

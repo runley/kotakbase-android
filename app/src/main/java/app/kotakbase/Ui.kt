@@ -68,6 +68,8 @@ object Icons {
     val pause = icon("M8 5v14M16 5v14")
     val next = icon("M5 5.5l9 6.5-9 6.5zM19 5v14")
     val prev = icon("M19 5.5l-9 6.5 9 6.5zM5 5v14")
+    val download = icon("M12 4v11m-5-5 5 5 5-5M5 20h14") // the desktop's download button
+    val people = icon("M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.5a3.5 3.5 0 0 1 0 6.5M18.5 14.5c1.8.8 3 2.7 3 5.5")
 }
 
 val FORMAT = linkedMapOf("TV" to "TV Series", "TV_SHORT" to "TV Short", "MOVIE" to "Movie", "OVA" to "OVA", "ONA" to "ONA", "SPECIAL" to "Special")

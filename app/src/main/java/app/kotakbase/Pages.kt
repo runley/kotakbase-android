@@ -207,6 +207,7 @@ fun SettingsPage() {
                 Text(if (code == null) t("System ({language})", "language" to system) else I18n.LANGUAGES.getValue(code), Modifier.padding(start = 8.dp))
             }
         }
+        item { AniListSection() }
         item { ExtensionsSection() }
     }
 }

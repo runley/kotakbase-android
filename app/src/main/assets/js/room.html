@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- Watch Together's engine: the desktop's room.js and room-net.js, unchanged, in an invisible WebView (it has the
+     WebRTC and WebSocket they need). The app pushes its player's state in (__player) and gets the room's requests
+     back through `Native` (Room.kt). -->
+<script type="module">
+import { openRoom, parseCode, formatCode, inviteLink } from './room.js'
+
+window.__t = (text, vars) => Native.t(text, JSON.stringify(vars ?? {}))
+
+// the native player as room.js reads a <video>: its state as the app last pushed it, its controls passed back
+const P = { open: false, duration: NaN, time: 0, paused: true, rate: 1, buffering: false }
+window.__player = s => { Object.assign(P, s) }
+const video = {
+  get duration () { return P.duration },
+  get currentTime () { return P.time },
+  set currentTime (t) { P.time = t; Native.seek(t) },
+  get paused () { return P.paused },
+  play () { P.paused = false; Native.play() },
+  pause () { P.paused = true; Native.pause() },
+  get playbackRate () { return P.rate },
+  set playbackRate (r) { P.rate = r; Native.rate(r) },
+  autoplay: true
+}
+const getPlayer = () => P.open ? { video, buffering: P.buffering } : null
+
+let room = null
+const snapshot = () => room && {
+  code: room.code, formatted: formatCode(room.code), invite: inviteLink(room.code), me: room.me, host: room.host, isHost: room.isHost(),
+  members: room.members().map(m => ({ id: m.id, name: m.name, known: !!m.known, buffering: !!m.buffering, key: m.key ?? null })),
+  load: room.load, net: room.net, problem: room.problem, chat: room.chat()
+}
+const changed = () => Native.changed(JSON.stringify(snapshot()))
+
+window.__room = {
+  async open (code, name, device) {
+    try {
+      room = await openRoom({
+        code: code || undefined, name, device, getPlayer,
+        onChange: changed, onChat: changed,
+        onLoad: l => Native.load(JSON.stringify(l)),
+        onRemoved: banned => { room?.leave(); room = null; Native.removed(banned); changed() }
+      })
+      if (!code) room.claim() // created here: you're its host
+      changed()
+    } catch (e) { Native.error(String(e?.message ?? e)) }
+  },
+  leave () { room?.leave(); room = null; changed() },
+  played (l) { room?.played(JSON.parse(l)) },
+  say (text) { room?.say(text) },
+  rename (name) { room?.rename(name) },
+  makeHost (id) { room?.makeHost(id) },
+  kick (id, ban) { room?.kick(id, ban) },
+  parse: text => parseCode(text)
+}
+Native.ready()
+</script>

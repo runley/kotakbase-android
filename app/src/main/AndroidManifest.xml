@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- downloads keep going in the background, with a notification -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:label="Kotakbase"
@@ -8,12 +12,20 @@
         <!-- configChanges: folding/unfolding resizes the window instead of recreating the activity (and playback) -->
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTop"
             android:exported="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboardHidden"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Watch Together invites: kotakbase://join/CODE, as on desktop -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="kotakbase" android:host="join" />
             </intent-filter>
         </activity>
         <!-- its own task, so picture-in-picture takes just the player; one at a time (a new episode reuses it) -->
@@ -26,5 +38,6 @@
             android:resizeableActivity="true"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboardHidden" />
+        <service android:name=".DownloadService" android:exported="false" android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

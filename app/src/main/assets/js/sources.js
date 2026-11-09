@@ -2,7 +2,7 @@
 // each, so the source picker ranks and Auto Selects exactly like desktop's.
 import { parseRelease, releaseTags, audioLanguages, subLanguages, rankByLanguage, pickAuto, forThisEntry, otherEntryWords, entryNumbers } from './release.js'
 import { LANGS, fromMpv, pickTrack, pickSubTrack } from './lang.js'
-import { pickFile, findEpisode, VIDEO, RISKY } from './episode.js'
+import { pickFile, findEpisode, markedEpisode, VIDEO, RISKY } from './episode.js'
 import { pickSeries, chapterRows, titlesOf } from './manga.js'
 
 // Same title list Hayase builds: all titles + synonyms, plus "S2" variants of "Season 2" / "2nd Season" (app.js titles())
@@ -73,4 +73,68 @@ export function tracks (list, audio, subs) {
   const ai = pickTrack(a, audio)
   const sub = pickSubTrack(s, subs)
   return { aid: ai >= 0 ? a[ai].number : null, sid: sub ? sub.number : null }
+}
+
+// ---- AniList sync: the desktop's rules (anilist-sync.js, unchanged); its loop (network, queue, pacing) is AniSync.kt ----
+import { localEntry, toLocal, merge, pushTarget, saveVars, same } from './anilist-sync.js'
+const norm = status => status === 'PAUSED' || status === 'REPEATING' ? 'CURRENT' : status
+const view = r => r ? { status: norm(r.status), progress: r.progress ?? 0, score: r.score ?? 0 } : null
+
+// Kotakbase's entry for every show it has state for (desktop createSync locals()); shows: id → AniList details, if known
+export function syncLocals (progress, list, scores, shows) {
+  const ids = new Set([...Object.keys(progress), ...Object.keys(scores)].map(Number).concat(list))
+  return Object.fromEntries([...ids].map(id => [id, localEntry(progress[id], list.includes(id), scores[id] ?? 0, shows[id])]))
+}
+
+// A pull (desktop createSync pull()): local entries, AniList's (as fromApi), the base and the waiting outbox →
+// what to take in here and which shows to send
+export function syncPull (local, remote, old, box) {
+  const imports = []
+  const sends = []
+  for (const id of new Set([...Object.keys(local), ...Object.keys(remote)])) {
+    if (box[id]) continue // a change here is still waiting to be sent: it's newer
+    const L = local[id] ?? null
+    const T = merge(L, remote[id], old[id])
+    if (!T) continue
+    if (!same(L, T)) imports.push([Number(id), T])
+    if (!same(view(remote[id]), T)) sends.push(Number(id))
+  }
+  return { imports, sends }
+}
+
+// Takes AniList's entries in (desktop createSync apply()): the new progress, list and scores; raw: AniList's list
+// entries by id (episode counts, updatedAt)
+export function syncApply (imports, raw, progress, list, scores, shows) {
+  for (const [id, T] of imports) {
+    const L = localEntry(progress[id], list.includes(id), scores[id] ?? 0, shows[id])
+    if (T.status === 'PLANNING') { if (!list.includes(id)) list.push(id) } else if (progress[id]?.rewatch && T.status === 'COMPLETED') {
+      // rewatching here: AniList still saying completed doesn't take the rewatch's progress back
+    } else if (!L || L.status !== T.status || L.progress !== T.progress) {
+      const e = raw[id]
+      progress[id] = { ...toLocal(T, progress[id], e?.media?.episodes ?? e?.media?.chapters ?? shows[id]?.episodes ?? shows[id]?.chapters), at: Math.max(progress[id]?.at ?? 0, (e?.updatedAt ?? 0) * 1000) || Date.now() }
+    }
+    if (T.score) scores[id] = T.score
+    else delete scores[id]
+  }
+  return { progress, list, scores }
+}
+
+// Sending one show: pushTarget's target ('delete', an entry, or null) and SaveMediaListEntry's variables
+export function syncPush (mediaId, L, old, unwatch, live) {
+  const target = pushTarget(L, old, unwatch, live)
+  return { target, vars: target && target !== 'delete' ? saveVars(mediaId, target, live) : null }
+}
+
+// ---- downloads ----
+// Which files of a torrent to download (desktop downloads.js chooseFiles, which also needs Node's fs, so it's repeated
+// here): one file asked for by index, or each episode found by its number; for one episode, a torrent's only video
+// counts too unless its name marks another episode. files: [{ name, index }]; episodes: [{ episode, numbering }].
+// Returns [{ index, episode }], [] when nothing matches.
+export function chooseFiles (files, fileIndex, episodes) {
+  if (fileIndex != null) return files[fileIndex] && VIDEO.test(files[fileIndex].name) ? [{ index: fileIndex, episode: episodes[0]?.episode ?? null }] : []
+  const videos = files.filter(f => VIDEO.test(f.name))
+  const lone = e => episodes.length === 1 && videos.length === 1 && [null, e.episode].includes(markedEpisode(videos[0].name)) ? videos[0] : null
+  const found = episodes.map(e => ({ file: findEpisode(files, e.episode, e.numbering ?? {}) ?? lone(e), episode: e.episode }))
+  const seen = new Set()
+  return found.filter(f => f.file && VIDEO.test(f.file.name) && !seen.has(f.file) && seen.add(f.file)).map(f => ({ index: f.file.index, episode: f.episode }))
 }

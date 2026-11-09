@@ -26,3 +26,22 @@ for (const file of ['release.js', 'lang.js', 'manga.js']) {
 // which file of a torrent is an episode (the desktop's main process uses it; it has no imports, so it runs here too)
 copyFileSync(join(desktop, 'episode.js'), join(js, 'episode.js'))
 console.log('episode.js')
+// AniList sync's pure rules (merge, pushTarget, …); the loop around them is Kotlin (AniSync.kt). Its i18n import is
+// assets/js/i18n.js, a stand-in (the desktop's needs Intl, which QuickJS lacks)
+for (const file of ['anilist-sync.js']) {
+  copyFileSync(join(desktop, 'ui', file), join(js, file))
+  console.log(file)
+}
+// the API client ids (AniList sign-in, MyAnimeList), from the desktop's secrets file, kept out of git like there
+const { readFileSync, existsSync } = await import('node:fs')
+const secrets = join(desktop, 'secrets.local.json')
+if (existsSync(secrets)) {
+  const s = JSON.parse(readFileSync(secrets, 'utf8'))
+  writeFileSync('secrets.properties', `anilistClientId=${s.anilistClientId ?? ''}\nmalClientId=${s.malClientId ?? ''}\n`)
+  console.log('secrets.properties')
+}
+// Watch Together, unchanged: it runs in an invisible WebView (assets/js/room.html), which has the WebRTC it needs
+for (const file of ['room.js', 'room-net.js']) {
+  copyFileSync(join(desktop, 'ui', file), join(js, file))
+  console.log(file)
+}
