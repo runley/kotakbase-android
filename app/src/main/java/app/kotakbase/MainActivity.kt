@@ -76,9 +76,23 @@ class Nav {
     val top get() = stack.last()
     fun open(id: Int) { if (wide) side = id else stack += Page.Show(id) }
     fun go(page: Page) { if (page is Page.Show) open(page.id) else stack += page }
-    fun tab(page: Page) { stack.clear(); stack += page; side = null }
-    fun back() = if (wide && side != null) side = null else stack.removeAt(stack.lastIndex).let { }
-    val canGoBack get() = stack.size > 1 || (wide && side != null)
+    /** Where you were before each tab switch, so Back goes to the previous tab (and its page) before leaving the app. */
+    private val history = mutableStateListOf<Pair<List<Page>, Int?>>()
+
+    /** fresh: forget the history (switching anime/manga, whose pages belong to the other mode). */
+    fun tab(page: Page, fresh: Boolean = false) {
+        if (fresh) history.clear()
+        else if (stack.toList() != listOf(page) || side != null) { history += stack.toList() to side; if (history.size > 50) history.removeAt(0) }
+        stack.clear(); stack += page; side = null
+    }
+    fun back() {
+        when {
+            wide && side != null -> side = null
+            stack.size > 1 -> stack.removeAt(stack.lastIndex)
+            history.isNotEmpty() -> history.removeAt(history.lastIndex).let { (s, sd) -> stack.clear(); stack += s; side = sd }
+        }
+    }
+    val canGoBack get() = stack.size > 1 || (wide && side != null) || history.isNotEmpty()
 
     /** Folding moves an open show from beside the page onto its own page, and unfolding moves it back. */
     fun resize(to: Boolean) {
@@ -193,7 +207,7 @@ fun ModeSwitch(nav: Nav, compact: Boolean) {
     val label = if (Store.manga) t("Switch to anime") else t("Switch to manga")
     Row(
         Modifier.padding(horizontal = 16.dp, vertical = 10.dp).clip(RoundedCornerShape(8.dp))
-            .clickable { Store.setMode(!Store.manga); nav.tab(Page.Home) }.semantics { contentDescription = label },
+            .clickable { Store.setMode(!Store.manga); nav.tab(Page.Home, fresh = true) }.semantics { contentDescription = label },
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // the box is the switch (desktop .logo-box): a corner badge in the other mode's colour, with swap arrows
